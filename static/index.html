@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>仲良しTube+ ミニ</title>
+<style>
+  :root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+  body{margin:0;background:#0f0f0f;color:#f1f1f1;padding:24px;max-width:960px;margin:auto}
+  h1{font-size:1.4rem;margin:0 0 16px}
+  .row{display:flex;gap:8px;margin-bottom:16px}
+  input{flex:1;padding:10px 14px;border-radius:999px;border:1px solid #3f3f3f;background:#121212;color:#f1f1f1}
+  button{padding:10px 18px;border-radius:999px;border:0;background:#ff0033;color:#fff;cursor:pointer;font-weight:600}
+  video{width:100%;border-radius:12px;background:#000;margin-top:12px}
+  .item{display:flex;gap:12px;padding:8px;border-radius:8px;cursor:pointer}
+  .item:hover{background:#1f1f1f}
+  .item img{width:160px;height:90px;object-fit:cover;border-radius:6px}
+  .meta{font-size:.85rem;color:#aaa}
+  .api-box{font-size:.8rem;color:#888;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>🎬 仲良しTube+ ミニ (Python版)</h1>
+<div class="row">
+  <input id="q" placeholder="検索ワード or 動画ID" />
+  <button onclick="go()">検索</button>
+</div>
+<div class="api-box">API: <code id="apiUrl"></code> <button onclick="setApi()">変更</button></div>
+<video id="player" controls playsinline></video>
+<div id="results"></div>
+<script>
+  const KEY='nakayoshi_api';
+  const defaultApi = location.hostname.endsWith('github.io') ? '' : location.origin;
+  let API = localStorage.getItem(KEY) || defaultApi || prompt('API URL を入力 (例: https://your-app.onrender.com)') || '';
+  localStorage.setItem(KEY, API);
+  document.getElementById('apiUrl').textContent = API || '(未設定)';
+  function setApi(){ const v = prompt('API URL', API); if(v!==null){ API=v; localStorage.setItem(KEY,v); location.reload(); } }
+
+  async function go(){
+    const q = document.getElementById('q').value.trim();
+    if(!q) return;
+    // 11文字英数字なら動画IDとして扱う
+    if(/^[\w-]{11}$/.test(q)){ return play(q); }
+    const r = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}`).then(r=>r.json());
+    const el = document.getElementById('results');
+    el.innerHTML = '';
+    for(const it of (r.items||[]).slice(0,30)){
+      const d=document.createElement('div');
+      d.className='item';
+      d.innerHTML=`<img src="${it.thumbnail||''}" loading="lazy"/><div><div>${it.title||''}</div><div class="meta">${it.author||''} · ${it.duration||''}s</div></div>`;
+      d.onclick=()=>play(it.id);
+      el.appendChild(d);
+    }
+  }
+
+  async function play(id){
+    const v = document.getElementById('player');
+    v.removeAttribute('src');
+    const r = await fetch(`${API}/api/video?id=${id}`).then(r=>r.json());
+    // 優先: HLS (hls.js が必要) > progressive mp4
+    const mp4 = (r.streams||[]).filter(s=>(s.container==='mp4'||(s.type||'').includes('mp4')) && !(s.type||'').includes('audio'));
+    mp4.sort((a,b)=>(parseInt(b.quality)||0)-(parseInt(a.quality)||0));
+    if(mp4[0]){ v.src = mp4[0].url; v.play().catch(()=>{}); return; }
+    if(r.hls){ v.src = r.hls; v.play().catch(()=>{}); return; }
+    alert('再生可能なストリームが見つかりませんでした');
+  }
+</script>
+</body>
+</html>
